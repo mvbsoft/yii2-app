@@ -44,7 +44,7 @@ services:
 
   mongo:
     image: mongo
-    container_name: movies_mongo
+    container_name: mongo
     restart: always
     environment:
       MONGO_INITDB_DATABASE: mvbsoft

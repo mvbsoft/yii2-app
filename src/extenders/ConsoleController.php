@@ -47,30 +47,30 @@ class ConsoleController extends Controller
         echo "\e[1;33m $message \e[0m\n";
     }
 
-    public static function progressBar($done, $total, $size = 50, $msg = null)
+    public static function progressBar($done, $total, $size = 50, $message = null)
     {
-        static $start_time;
+        static $startTime;
 
         if ($done > $total) {
             return;
         }
 
-        $start_time = $start_time ?: time();
+        $startTime = $startTime ?: time();
         $now = time();
-        $percent = (double)($done / $total);
-        $bar = floor($percent * $size);
+        $percent = ($done / $total);
+        $barSize = floor($percent * $size);
 
         $progressBar = "\e[1;32m\r[";
-        $progressBar .= str_repeat("=", $bar);
-        $progressBar .= ($bar < $size) ? ">" . str_repeat(" ", $size - $bar) : "=";
+        $progressBar .= str_repeat("=", $barSize);
+        $progressBar .= ($barSize < $size) ? ">" . str_repeat(" ", $size - $barSize) : "=";
         $progressBar .= "] " . number_format($percent * 100, 0) . "% \e[0m";
 
-        $rate = ($now - $start_time) / $done;
-        $left = $total - $done;
-        $eta = round($rate * $left, 2);
-        $elapsed = $now - $start_time;
+        $rate = ($now - $startTime) / $done;
+        $remaining = $total - $done;
+        $estimatedTime = round($rate * $remaining, 2);
+        $elapsedTime = $now - $startTime;
 
-        $progressBar .= "$done / $total remaining: " . number_format($eta) . " sec.  elapsed: " . number_format($elapsed) . " sec. " . ($msg ?? "");
+        $progressBar .= "$done / $total remaining: " . number_format($estimatedTime) . " sec. elapsed: " . number_format($elapsedTime) . " sec. " . ($message ?: "");
 
         echo "$progressBar ";
 

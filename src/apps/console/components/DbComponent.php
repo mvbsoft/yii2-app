@@ -1,6 +1,6 @@
 <?php
 
-namespace dev\components;
+namespace console\components;
 
 use yii\db\Connection;
 

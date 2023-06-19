@@ -1,10 +1,10 @@
 <?php
 
-namespace dev\components;
+namespace console\components;
 
-use yii\redis\Cache;
+use yii\queue\redis\Queue;
 
-class CacheComponent extends Cache {
+class QueueComponent extends Queue {
 
     public $redis = [
         'class' => 'yii\redis\Connection',
@@ -12,7 +12,7 @@ class CacheComponent extends Cache {
         'port' => 6379,
         'retries' => 1,
         'password' => 'ReD1S_%%_sErVeR_&at*(#Ion',
-        'database' => 2
+        'database' => 1
     ];
 
 }

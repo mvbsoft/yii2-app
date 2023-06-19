@@ -1,9 +1,8 @@
 <?php
 
-namespace dev\components;
+namespace console\components;
 
 use yii\redis\Cache;
-
 class CacheComponent extends Cache {
 
     public $redis = [

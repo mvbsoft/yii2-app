@@ -72,7 +72,7 @@ class ConsoleController extends Controller
 
         $progressBar .= "$done / $total remaining: " . number_format($estimatedTime) . " sec. elapsed: " . number_format($elapsedTime) . " sec. " . ($message ?: "");
 
-        echo "$progressBar ";
+        echo $progressBar;
 
         flush();
 

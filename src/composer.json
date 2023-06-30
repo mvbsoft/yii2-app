@@ -15,7 +15,8 @@
     "yiisoft/yii2-twig": "~2.4.2",
     "yiisoft/yii2-mongodb": "~3.0.0",
     "thamtech/yii2-uuid": "*",
-    "nesbot/carbon": "^2.0.0"
+    "nesbot/carbon": "^2.0.0",
+    "friendsofphp/php-cs-fixer": "^2.0"
   },
   "require-dev": {
     "yiisoft/yii2-debug": "~2.1.0",

@@ -1,0 +1,885 @@
+#!/usr/bin/env php
+<?php
+
+echo "\e[1;32m 
+************************************************************************
+*                                                                      *
+*                               MVBSOFT                                *
+*                         malina.mvb@gmail.com                         *
+*                                                                      *
+*                       Create Application Tool                        *
+*                                                                      *
+************************************************************************
+\e[0m\n";
+
+const APP_TYPE_API = 'api';
+const APP_TYPE_WEB = 'web';
+const APP_TYPE_CONSOLE = 'console';
+
+$questions = [
+    'appName'   => "1. Please enter the name of the application. It must be unique in the 'apps' folder. (or enter 'CANCEL' for exit):",
+    'appType'   => "2. Please enter the type of the application. It can be 'console', 'web', 'api'. (or enter 'CANCEL' for exit):",
+    'devHost'   => "5. Please enter the name of the Nginx developer host file:",
+    'prodHost'  => "3. Please enter the name of the Nginx production host file:",
+    'localHost' => "4. Please enter the name of the Nginx local host file:"
+];
+
+$basePath = __DIR__;
+$appsPath = $basePath . DIRECTORY_SEPARATOR . 'apps';
+
+$appName    = null;
+$appType    = null;
+$prodHost   = null;
+$devHost    = null;
+$localHost  = null;
+
+$skipQuestions = [];
+
+foreach ($questions as $key => $question) {
+    if(in_array($key, $skipQuestions)){
+        continue;
+    }
+
+    $varNameInput = " " . ucfirst($key) . ": ";
+
+    echo $question . PHP_EOL;
+    echo $varNameInput;
+
+    while (true) {
+        $answer = getAnswer();
+
+        if(is_null($answer)){
+            continue;
+        }
+
+        $hasErrors = false;
+
+        if ($key == 'appName') {
+            if(empty($answer)){
+                echo "\e[1;31m Application name cannot be empty. \e[0m\n";
+                echo $varNameInput;
+                $hasErrors = true;
+            }
+            elseif(is_dir($appsPath . '/' . $answer)){
+                echo "\e[1;31m An app with that name already exists. Please enter a new name. \e[0m\n";
+                echo $varNameInput;
+                $hasErrors = true;
+            }
+        }
+
+        if ($key == 'appType') {
+            if(empty($answer)){
+                echo "\e[1;31m Application type cannot be empty. \e[0m\n";
+                echo $varNameInput;
+                $hasErrors = true;
+            }
+            elseif(!in_array($answer, [APP_TYPE_WEB, APP_TYPE_API, APP_TYPE_CONSOLE])){
+                echo "\e[1;31m This type of app not exists. \e[0m\n";
+                echo $varNameInput;
+                $hasErrors = true;
+            }
+            elseif(!in_array($answer, [APP_TYPE_API, APP_TYPE_WEB])){
+                $skipQuestions = array_merge($skipQuestions, ['devHost', 'prodHost', 'localHost']);
+            }
+        }
+
+        if(!$hasErrors){
+            $$key = $answer;
+            break;
+        }
+    }
+}
+$appPath = $appsPath . DIRECTORY_SEPARATOR . $appName;
+
+$struct = struct($appName);
+
+createDirectory($appsPath . DIRECTORY_SEPARATOR . $appName);
+
+updateAliases($basePath, $appName);
+
+createAppStruct($appName, $appType, $appPath, $struct);
+
+if($devHost){
+    createFile($appName, "/etc/nginx/sites-available/$devHost.conf", 'generateNginxConfig');
+}
+
+if($prodHost){
+    createFile($appName, "/etc/nginx/sites-available/$prodHost.conf", 'generateNginxConfig');
+}
+
+if($localHost){
+    createFile($appName, "/etc/nginx/sites-available/$localHost.conf", 'generateNginxConfig');
+}
+
+function createAppStruct(string $applicationName, string $applicationType, string $path, array $struct): void
+{
+    foreach ($struct as $item) {
+        $type    = $item['type']    ?? null;
+        $name    = $item['name']    ?? null;
+        $path    = $item['path']    ?? $path;
+        $appType = $item['appType'] ?? [];
+
+        if ($type === 'dir' && in_array($applicationType, $appType)) {
+
+            createDirectory($path . DIRECTORY_SEPARATOR . $name);
+
+            $attachments = $item['attachments'] ?? [];
+
+            if(!empty($attachments)){
+                createAppStruct($applicationName, $applicationType, $path . DIRECTORY_SEPARATOR . $name, $attachments);
+            }
+        }
+
+        if ($type === 'file' && in_array($applicationType, $appType)) {
+            createFile($applicationName, $path . DIRECTORY_SEPARATOR . $name, $item['generator']);
+        }
+    }
+}
+
+function getAnswer()
+{
+    $answer = fgets(STDIN);
+    $answer = trim($answer);
+
+    if (strcasecmp($answer, 'CANCEL') === 0) {
+        echo "\033[0;31m";
+        echo "Stopped manually by user\n";
+        echo "\033[0m";
+        exit;
+    }
+
+    return $answer;
+}
+
+function updateAliases($basePath, $appName): void
+{
+    $filePath = $basePath . DIRECTORY_SEPARATOR . "aliases.php";
+
+    $fileContent = file_get_contents($filePath);
+
+    $fileContent .= "\nYii::setAlias('@$appName', __DIR__ . '/apps/$appName');";
+
+    file_put_contents($filePath, $fileContent);
+}
+
+function createFile($appName, $path, $generator): void
+{
+    if (function_exists($generator) && !file_exists($path)) {
+        file_put_contents($path, $generator($appName));
+    }
+}
+
+function createDirectory($path): void
+{
+    if(!file_exists($path)){
+        mkdir($path);
+    }
+}
+
+function struct($appName): array
+{
+    return [
+        [
+            "type" => "file",
+            "name" => "Configurator.php",
+            "appType" => [APP_TYPE_CONSOLE],
+            "generator" => "generateConsoleConfigurator"
+        ],
+        [
+            "type" => "file",
+            "name" => "Configurator.php",
+            "appType" => [APP_TYPE_WEB],
+            "generator" => "generateWebConfigurator"
+        ],
+        [
+            "type" => "file",
+            "name" => "Configurator.php",
+            "appType" => [APP_TYPE_API],
+            "generator" => "generateApiConfigurator"
+        ],
+        [
+            "type" => "dir",
+            "name" => "web",
+            "appType" => [APP_TYPE_API, APP_TYPE_WEB],
+            "attachments" => [
+                [
+                    "type" => "dir",
+                    "name" => "assets",
+                    "appType" => [APP_TYPE_WEB],
+                    "attachments" => [
+                        [
+                            "type" => "file",
+                            "name" => ".gitignore",
+                            "appType" => [APP_TYPE_WEB],
+                            "generator" => "generateGitignore"
+                        ]
+                    ]
+                ],
+                [
+                    "type" => "file",
+                    "name" => "index.php",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB],
+                    "generator" => "generateWebIndex"
+                ]
+            ]
+        ],
+        [
+            "type" => "dir",
+            "name" => "views",
+            "appType" => [APP_TYPE_WEB],
+            "attachments" => [
+                [
+                    "type" => "dir",
+                    "name" => "default",
+                    "appType" => [APP_TYPE_WEB],
+                    "attachments" => [
+                        [
+                            "type" => "file",
+                            "name" => "default.php",
+                            "appType" => [APP_TYPE_WEB],
+                            "generator" => "generateViewDefault"
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        [
+            "type" => "dir",
+            "name" => "runtime",
+            "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
+            "attachments" => [
+                [
+                    "type" => "file",
+                    "name" => ".gitignore",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
+                    "generator" => "generateGitignore"
+                ]
+            ]
+        ],
+        [
+            "type" => "dir",
+            "name" => "modules",
+            "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
+            "attachments" => [
+                [
+                    "type" => "file",
+                    "name" => "DebugModule.php",
+                    "appType" => [APP_TYPE_WEB],
+                    "generator" => "generateDebugModule"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "GiiModule.php",
+                    "appType" => [APP_TYPE_WEB],
+                    "generator" => "generateGiiModule"
+                ]
+            ]
+        ],
+        [
+            "type" => "dir",
+            "name" => "models",
+            "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
+            "attachments" => [
+                [
+                    "type" => "file",
+                    "name" => ".gitkeepmarker",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
+                    "generator" => "generateGitkeepmarker"
+                ]
+            ]
+        ],
+        [
+            "type" => "dir",
+            "name" => "layouts",
+            "appType" => [APP_TYPE_WEB],
+            "attachments" => [
+                [
+                    "type" => "file",
+                    "name" => "main.php",
+                    "appType" => [APP_TYPE_WEB],
+                    "generator" => "generateLayout"
+                ]
+            ]
+        ],
+        [
+            "type" => "dir",
+            "name" => "migrations",
+            "appType" => [APP_TYPE_CONSOLE]
+        ],
+        [
+            "type" => "dir",
+            "name" => "controllers",
+            "appType" => [APP_TYPE_WEB, APP_TYPE_API, APP_TYPE_CONSOLE],
+            "attachments" => [
+                [
+                    "type" => "file",
+                    "name" => "DefaultController.php",
+                    "appType" => [APP_TYPE_WEB],
+                    "generator" => "generateDefaultWebController"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "DefaultController.php",
+                    "appType" => [APP_TYPE_API],
+                    "generator" => "generateDefaultApiController"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "DefaultController.php",
+                    "appType" => [APP_TYPE_CONSOLE],
+                    "generator" => "generateDefaultConsoleController"
+                ]
+            ]
+        ],
+        [
+            "type" => "dir",
+            "name" => "components",
+            "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
+            "attachments" => [
+                [
+                    "type" => "file",
+                    "name" => "CacheComponent.php",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
+                    "generator" => "generateCacheComponent"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "DbComponent.php",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
+                    "generator" => "generateDbComponent"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "LogComponent.php",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
+                    "generator" => "generateLogComponent"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "MongodbComponent.php",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
+                    "generator" => "generateMongodbComponent"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "QueueComponent.php",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
+                    "generator" => "generateQueueComponent"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "RequestComponent.php",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB],
+                    "generator" => "generateRequestComponent"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "SessionComponent.php",
+                    "appType" => [APP_TYPE_WEB],
+                    "generator" => "generateSessionComponent"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "UrlManagerComponent.php",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB],
+                    "generator" => "generateUrlManagerComponent"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "UserComponent.php",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB],
+                    "generator" => "generateUserComponent"
+                ]
+            ]
+        ],
+        [
+            "type" => "file",
+            "name" => $appName,
+            "path" => __DIR__,
+            "appType" => [APP_TYPE_CONSOLE],
+            "generator" => "generateConsoleExecutableFile"
+        ],
+        [
+            "type" => "file",
+            "name" => $appName . '.bat',
+            "path" => __DIR__,
+            "appType" => [APP_TYPE_CONSOLE],
+            "generator" => "generateConsoleExecutableBatFile"
+        ]
+    ];
+}
+
+function generateConsoleExecutableFile($appName): string
+{
+    return '#!/usr/bin/env php
+<?php
+
+use ' . $appName . '\Configurator;
+
+$basePath = __DIR__;
+
+require $basePath . \'/constants.php\';
+require $basePath . \'/vendor/autoload.php\';
+require $basePath . \'/vendor/yiisoft/yii2/Yii.php\';
+require $basePath . \'/aliases.php\';
+
+$configs = Configurator::build();
+
+$application = new yii\console\Application($configs);
+
+$exitCode = $application->run();
+
+exit($exitCode);';
+}
+
+function generateConsoleExecutableBatFile($appName): string
+{
+    $const = strtoupper($appName . '_PATH');
+
+    return '
+@echo off
+
+rem -------------------------------------------------------------
+rem  Yii command line bootstrap script for Windows.
+rem -------------------------------------------------------------
+
+@setlocal
+
+set ' . $const . '=%~dp0
+
+if "%PHP_COMMAND%" == "" set PHP_COMMAND=php.exe
+
+"%PHP_COMMAND%" "%' . $const . '%' . $appName . '" %*
+
+@endlocal';
+}
+
+function generateViewDefault(): string
+{
+    return 'Default';
+}
+
+function generateGitkeepmarker(): string
+{
+    return '';
+}
+
+function generateApiConfigurator($appName): string
+{
+    $controllerNamespace = "'" . $appName . "\\controllers'";
+
+    return '<?php
+
+namespace ' . $appName . ';
+class Configurator extends \mvbsoft\Configurator {
+    public string $id = \'app-' . $appName . '\';
+    public string $controllerNamespace = ' . $controllerNamespace . ';
+    public function keyBootstrap(): array
+    {
+        return [\'log\'];
+    }
+    public function keyParams(): array
+    {
+        return [];
+    }
+
+}';
+}
+
+
+function generateConsoleConfigurator($appName): string
+{
+    $controllerNamespace = "'" . $appName . "\\controllers'";
+
+    return '<?php
+
+namespace ' . $appName . ';
+class Configurator extends \mvbsoft\Configurator {
+    public string $id = \'app-' . $appName . '\';
+    public string $controllerNamespace = ' . $controllerNamespace . ';
+    public function keyBootstrap(): array
+    {
+        return [\'log\'];
+    }
+    public function keyParams(): array
+    {
+        return [];
+    }
+
+}';
+}
+
+function generateWebConfigurator($appName): string
+{
+    $controllerNamespace = "'" . $appName . "\\controllers'";
+
+    return '<?php
+
+namespace ' . $appName . ';
+class Configurator extends \mvbsoft\Configurator {
+    public string $id = \'app-' . $appName . '\';
+    public string $controllerNamespace = ' . $controllerNamespace . ';
+    public array $aliases = [
+        \'@bower\' => \'@vendor/bower-asset\',
+        \'@npm\'   => \'@vendor/npm-asset\'
+    ];
+    public function keyLayoutPath(): string
+    {
+        return $this->keyBasePath() . \'/layouts\';
+    }
+    public function keyBootstrap(): array
+    {
+        return [\'log\', \'debug\', \'gii\'];
+    }
+    public function keyParams(): array
+    {
+        return [];
+    }
+
+}';
+}
+
+function generateLayout(): string
+{
+    return '<?php
+
+/* @var $this View */
+/* @var $content string */
+
+use yii\helpers\Html;
+use yii\web\View;
+
+?>
+
+<?php $this->beginPage() ?>
+
+<!DOCTYPE html>
+
+<html lang="<?= Yii::$app->language ?>">
+
+    <head>
+        <meta charset="<?= Yii::$app->charset ?>">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <?php $this->registerCsrfMetaTags() ?>
+        <title><?= Html::encode($this->title) ?></title>
+        <?php $this->head() ?>
+    </head>
+
+    <body>
+    <?php $this->beginBody() ?>
+
+    <?= $content ?>
+
+    <?php $this->endBody() ?>
+    </body>
+
+</html>
+
+<?php $this->endPage() ?>';
+}
+
+function generateDefaultConsoleController($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\controllers;
+
+use mvbsoft\ConsoleController;
+
+class DefaultController extends ConsoleController {
+    public function actionDefault() : array {
+        return [];
+    }
+
+}';
+}
+
+function generateDefaultApiController($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\controllers;
+
+use mvbsoft\ApiController;
+
+class DefaultController extends ApiController {
+    public function actionDefault() : array {
+        return [];
+    }
+
+}';
+}
+
+function generateDefaultWebController($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\controllers;
+
+use mvbsoft\WebController;
+
+class DefaultController extends WebController {
+    public function actionDefault() : string {
+        return $this->render(\'default\');
+    }
+
+}';
+}
+
+function generateGiiModule($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\modules;
+
+use Yii;
+use yii\gii\Module;
+class GiiModule extends Module {
+    public $allowedIPs = [\'*\'];
+    public function getViewPath(): bool|string
+    {
+        return Yii::getAlias(\'@vendor/yiisoft/yii2-gii/src/views\');
+    }
+    
+}';
+}
+
+function generateDebugModule($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\modules;
+
+use yii\debug\Module;
+class DebugModule extends Module {
+    public $allowedIPs = [\'*\'];
+    
+}';
+}
+
+function generateWebIndex($appName): string
+{
+    return '<?php
+
+use ' . $appName . '\Configurator;
+
+$basePath = dirname(__DIR__, 3);
+
+require $basePath . \'/constants.php\';
+require $basePath . \'/vendor/autoload.php\';
+require $basePath . \'/vendor/yiisoft/yii2/Yii.php\';
+require $basePath . \'/aliases.php\';
+
+$configs = Configurator::build();
+
+(new yii\web\Application($configs))->run();
+';
+}
+
+function generateGitignore(): string
+{
+    return '*
+!.gitignore';
+}
+
+function generateCacheComponent($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\components;
+
+use yii\redis\Cache;
+class CacheComponent extends Cache {
+    public $redis = [
+        \'class\' => \'yii\redis\Connection\',
+        \'hostname\' => \'redis\',
+        \'port\' => 6379,
+        \'retries\' => 1,
+        \'password\' => \'ReD1S_%%_sErVeR_&at*(#Ion\',
+        \'database\' => 2
+    ];
+    
+}';
+}
+
+function generateDbComponent($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\components;
+
+use yii\db\Connection;
+class DbComponent extends Connection {
+    public $dsn = \'pgsql:host=postgres;dbname=mvbsoft\';
+    public $username = \'mvbsoft\';
+    public $password = \'mvbsoft_postgres\';
+    public $charset = \'utf8\';
+    public $enableSchemaCache =  true;
+    public $schemaCacheDuration = 3600;
+    public $enableQueryCache = true;
+    public $queryCacheDuration = 3600;
+    
+}';
+}
+
+function generateLogComponent($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\components;
+
+use yii\log\Dispatcher;
+class LogComponent extends Dispatcher {
+    public $traceLevel = YII_DEBUG ? 3 : 0;
+    public $targets = [
+        [
+            \'class\' => \'yii\log\FileTarget\',
+            \'levels\' => [\'error\', \'warning\']
+        ]
+    ];
+    
+}';
+}
+
+function generateMongodbComponent($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\components;
+
+use yii\mongodb\Connection;
+class MongodbComponent extends Connection {
+    public $dsn = \'mongodb://mvbsoft:mvbsoft_mongo@mongo/mvbsoft\';
+    
+}';
+}
+
+function generateQueueComponent($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\components;
+
+use yii\queue\redis\Queue;
+class QueueComponent extends Queue {
+    public $redis = [
+        \'class\' => \'yii\redis\Connection\',
+        \'hostname\' => \'redis\',
+        \'port\' => 6379,
+        \'retries\' => 1,
+        \'password\' => \'ReD1S_%%_sErVeR_&at*(#Ion\',
+        \'database\' => 1
+    ];
+    
+}';
+}
+
+function generateRequestComponent($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\components;
+
+use yii\web\Request;
+class RequestComponent extends Request {
+    public $csrfParam = \'csrf-app-dev\';
+    public $cookieValidationKey = \'cookie_validation_key_dev\';
+    
+}';
+}
+
+function generateSessionComponent($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\components;
+
+use yii\web\Session;
+class SessionComponent extends Session {
+    public $name = \'session-app-' . $appName . '\';
+    
+}';
+}
+
+function generateUrlManagerComponent($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\components;
+
+use yii\web\UrlManager;
+class UrlManagerComponent extends UrlManager {
+    public $enablePrettyUrl = true;
+    public $enableStrictParsing = true;
+    public $showScriptName = false;
+    public $rules = [
+        \'GET /\' => \'default/default\'
+    ];
+    
+}';
+}
+
+function generateUserComponent($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\components;
+
+use yii\web\User;
+class UserComponent extends User {
+    public $identityClass = \'identityClass\';
+    public $enableAutoLogin = true;
+    public $identityCookie = [\'name\' => \'_identity-app-dev\', \'httpOnly\' => true];
+    
+}';
+}
+
+function generateNginxConfig($appName): string
+{
+    return 'server {
+    charset utf-8;
+    client_max_body_size 128M;
+    sendfile off;
+
+    listen 80; ## listen for ipv4
+
+    server_name  dev.template.host;
+    root        /var/www/apps/' . $appName . '/web;
+    index       index.php index.html index.htm;
+
+    access_log  /var/log/nginx/dev-access.log;
+    error_log   /var/log/nginx/dev-errors.log;
+
+    location / {
+        if ($request_method = \'OPTIONS\')
+        {
+            add_header \'Access-Control-Allow-Origin\' \'*\';
+            add_header \'Access-Control-Allow-Methods\' \'PUT, GET, HEAD, OPTIONS, DELETE, POST, PATCH\';
+            add_header \'Access-Control-Allow-Headers\' \'Accept-Language, Accept-Encoding, Accept, Connection, Host, Origin, Referer, User-Agent, Content-type, Authorization, Timezone\';
+            add_header \'Access-Control-Max-Age\' 1728000;
+
+            return 204;
+        }
+
+        proxy_read_timeout 1800;
+        proxy_connect_timeout 1800;
+        proxy_send_timeout 1800;
+        send_timeout 1800;
+
+        try_files $uri $uri/ /index.php$is_args$args;
+    }
+
+    location ~ \.php$
+    {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_pass  php:9000;
+        try_files $uri =404;
+    }
+
+    location ~ /\.(ht|svn|git) {
+        deny all;
+    }
+}';
+}

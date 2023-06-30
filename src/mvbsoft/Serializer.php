@@ -1,6 +1,6 @@
 <?php
 
-namespace extenders;
+namespace mvbsoft;
 
 use yii\base\Arrayable;
 use yii\base\Model;

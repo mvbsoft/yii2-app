@@ -23,6 +23,7 @@ services:
       - ./docker/php/supervisor/supervisor.conf:/etc/supervisor/supervisord.conf
       - ./docker/php/supervisor/supervisor-programs.conf:/etc/supervisor/conf.d/app.conf
       - ./docker/php/configs:/usr/local/etc/php/conf.d
+      - ./docker/nginx/sites-available:/etc/nginx/sites-available
       - ./src:/var/www
     depends_on:
       - redis

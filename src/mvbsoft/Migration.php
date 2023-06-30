@@ -1,6 +1,6 @@
 <?php
 
-namespace extenders;
+namespace mvbsoft;
 
 use yii\base\NotSupportedException;
 use yii\db\ColumnSchemaBuilder;

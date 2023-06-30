@@ -1,6 +1,6 @@
 <?php
 
-namespace extenders;
+namespace mvbsoft;
 
 use ReflectionClass;
 use ReflectionException;
@@ -8,6 +8,11 @@ use ReflectionMethod;
 use ReflectionProperty;
 
 class Configurator {
+
+    public string $id = 'app';
+    public string $timeZone = 'UTC';
+
+    public string $controllerNamespace = '';
 
     public function keyVendorPath(): string
     {

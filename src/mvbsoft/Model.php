@@ -1,6 +1,6 @@
 <?php
 
-namespace extenders;
+namespace mvbsoft;
 
 class Model extends \yii\base\Model {
 

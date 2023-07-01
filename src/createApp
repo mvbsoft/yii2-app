@@ -95,9 +95,13 @@ $struct = struct($appName);
 
 createDirectory($appsPath . DIRECTORY_SEPARATOR . $appName);
 
+createAppStruct($appName, $appType, $appPath, $struct);
+
 updateAliases($basePath, $appName);
 
-createAppStruct($appName, $appType, $appPath, $struct);
+if($appType == APP_TYPE_CONSOLE){
+    updateGitIgnore($basePath, $appName);
+}
 
 if($devHost){
     createFile($appName, "/etc/nginx/sites-available/$devHost.conf", 'generateNginxConfig');
@@ -158,6 +162,18 @@ function updateAliases($basePath, $appName): void
     $fileContent = file_get_contents($filePath);
 
     $fileContent .= "\nYii::setAlias('@$appName', __DIR__ . '/apps/$appName');";
+
+    file_put_contents($filePath, $fileContent);
+}
+
+function updateGitIgnore($basePath, $appName): void
+{
+    $filePath = $basePath . DIRECTORY_SEPARATOR . ".gitignore";
+
+    $fileContent = file_get_contents($filePath);
+
+    $fileContent .= "\n$appName";
+    $fileContent .= "\n$appName.bat";
 
     file_put_contents($filePath, $fileContent);
 }
@@ -278,15 +294,7 @@ function struct($appName): array
         [
             "type" => "dir",
             "name" => "models",
-            "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
-            "attachments" => [
-                [
-                    "type" => "file",
-                    "name" => ".gitkeepmarker",
-                    "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
-                    "generator" => "generateGitkeepmarker"
-                ]
-            ]
+            "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE]
         ],
         [
             "type" => "dir",
@@ -389,6 +397,12 @@ function struct($appName): array
                     "name" => "UserComponent.php",
                     "appType" => [APP_TYPE_API, APP_TYPE_WEB],
                     "generator" => "generateUserComponent"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "ResponseComponent.php",
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB],
+                    "generator" => "generateResponseComponent"
                 ]
             ]
         ],
@@ -586,7 +600,6 @@ function generateDefaultConsoleController($appName): string
 namespace ' . $appName . '\controllers;
 
 use mvbsoft\ConsoleController;
-
 class DefaultController extends ConsoleController {
     public function actionDefault() : array {
         return [];
@@ -602,7 +615,6 @@ function generateDefaultApiController($appName): string
 namespace ' . $appName . '\controllers;
 
 use mvbsoft\ApiController;
-
 class DefaultController extends ApiController {
     public function actionDefault() : array {
         return [];
@@ -618,7 +630,6 @@ function generateDefaultWebController($appName): string
 namespace ' . $appName . '\controllers;
 
 use mvbsoft\WebController;
-
 class DefaultController extends WebController {
     public function actionDefault() : string {
         return $this->render(\'default\');
@@ -832,6 +843,30 @@ class UserComponent extends User {
     public $enableAutoLogin = true;
     public $identityCookie = [\'name\' => \'_identity-app-dev\', \'httpOnly\' => true];
     
+}';
+}
+
+function generateResponseComponent($appName): string
+{
+    return '<?php
+
+namespace ' . $appName . '\components;
+
+use mvbsoft\ResponseHelper;
+use yii\base\Event;
+use yii\web\Response;
+class ResponseComponent extends Response {
+    public function init()
+    {
+        parent::init();
+
+        $this->on(self::EVENT_BEFORE_SEND, function (Event $event) {
+            $this->format = Response::FORMAT_JSON;
+
+            $event->sender = ResponseHelper::generate($event);
+        });
+    }
+
 }';
 }
 

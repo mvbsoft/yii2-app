@@ -65,6 +65,11 @@ foreach ($questions as $key => $question) {
                 echo $varNameInput;
                 $hasErrors = true;
             }
+            elseif($answer == 'web'){
+                echo "\e[1;31m Application with this name is prohibited. Please enter a new name. \e[0m\n";
+                echo $varNameInput;
+                $hasErrors = true;
+            }
         }
 
         if ($key == 'appType') {
@@ -104,28 +109,29 @@ if($appType == APP_TYPE_CONSOLE){
 }
 
 if($devHost){
-    createFile($appName, "/etc/nginx/sites-available/$devHost.conf", 'generateNginxConfig');
+    createFile($appName, "/etc/nginx/sites-available/$devHost.conf", 'generateNginxConfig', ['host' => $devHost]);
 }
 
 if($prodHost){
-    createFile($appName, "/etc/nginx/sites-available/$prodHost.conf", 'generateNginxConfig');
+    createFile($appName, "/etc/nginx/sites-available/$prodHost.conf", 'generateNginxConfig', ['host' => $devHost]);
 }
 
 if($localHost){
-    createFile($appName, "/etc/nginx/sites-available/$localHost.conf", 'generateNginxConfig');
+    createFile($appName, "/etc/nginx/sites-available/$localHost.conf", 'generateNginxConfig', ['host' => $devHost]);
 }
 
 function createAppStruct(string $applicationName, string $applicationType, string $path, array $struct): void
 {
     foreach ($struct as $item) {
-        $type    = $item['type']    ?? null;
-        $name    = $item['name']    ?? null;
-        $path    = $item['path']    ?? $path;
-        $appType = $item['appType'] ?? [];
+        $type        = $item['type']    ?? null;
+        $name        = $item['name']    ?? null;
+        $path        = $item['path']    ?? $path;
+        $appType     = $item['appType'] ?? [];
+        $permissions = $item['permissions'] ?? 0777;
 
         if ($type === 'dir' && in_array($applicationType, $appType)) {
 
-            createDirectory($path . DIRECTORY_SEPARATOR . $name);
+            createDirectory($path . DIRECTORY_SEPARATOR . $name, $permissions);
 
             $attachments = $item['attachments'] ?? [];
 
@@ -178,17 +184,17 @@ function updateGitIgnore($basePath, $appName): void
     file_put_contents($filePath, $fileContent);
 }
 
-function createFile($appName, $path, $generator): void
+function createFile($appName, $path, $generator, $params = []): void
 {
     if (function_exists($generator) && !file_exists($path)) {
-        file_put_contents($path, $generator($appName));
+        file_put_contents($path, $generator($appName, $params));
     }
 }
 
-function createDirectory($path): void
+function createDirectory($path, $permissions = 0777): void
 {
     if(!file_exists($path)){
-        mkdir($path);
+        mkdir($path, $permissions);
     }
 }
 
@@ -262,6 +268,7 @@ function struct($appName): array
         [
             "type" => "dir",
             "name" => "runtime",
+            "permissions" => 777,
             "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
             "attachments" => [
                 [
@@ -269,6 +276,18 @@ function struct($appName): array
                     "name" => ".gitignore",
                     "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE],
                     "generator" => "generateGitignore"
+                ],
+                [
+                    "type" => "dir",
+                    "name" => "logs",
+                    "permissions" => 777,
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE]
+                ],
+                [
+                    "type" => "dir",
+                    "name" => "debug",
+                    "permissions" => 777,
+                    "appType" => [APP_TYPE_API, APP_TYPE_WEB, APP_TYPE_CONSOLE]
                 ]
             ]
         ],
@@ -401,8 +420,14 @@ function struct($appName): array
                 [
                     "type" => "file",
                     "name" => "ResponseComponent.php",
-                    "appType" => [APP_TYPE_API, APP_TYPE_WEB],
-                    "generator" => "generateResponseComponent"
+                    "appType" => [APP_TYPE_API],
+                    "generator" => "generateResponseApiComponent"
+                ],
+                [
+                    "type" => "file",
+                    "name" => "ResponseComponent.php",
+                    "appType" => [APP_TYPE_WEB],
+                    "generator" => "generateResponseWebComponent"
                 ]
             ]
         ],
@@ -423,7 +448,7 @@ function struct($appName): array
     ];
 }
 
-function generateConsoleExecutableFile($appName): string
+function generateConsoleExecutableFile($appName, $params = []): string
 {
     return '#!/usr/bin/env php
 <?php
@@ -446,7 +471,7 @@ $exitCode = $application->run();
 exit($exitCode);';
 }
 
-function generateConsoleExecutableBatFile($appName): string
+function generateConsoleExecutableBatFile($appName, $params = []): string
 {
     $const = strtoupper($appName . '_PATH');
 
@@ -478,7 +503,7 @@ function generateGitkeepmarker(): string
     return '';
 }
 
-function generateApiConfigurator($appName): string
+function generateApiConfigurator($appName, $params = []): string
 {
     $controllerNamespace = "'" . $appName . "\\controllers'";
 
@@ -501,7 +526,7 @@ class Configurator extends \mvbsoft\Configurator {
 }
 
 
-function generateConsoleConfigurator($appName): string
+function generateConsoleConfigurator($appName, $params = []): string
 {
     $controllerNamespace = "'" . $appName . "\\controllers'";
 
@@ -523,7 +548,7 @@ class Configurator extends \mvbsoft\Configurator {
 }';
 }
 
-function generateWebConfigurator($appName): string
+function generateWebConfigurator($appName, $params = []): string
 {
     $controllerNamespace = "'" . $appName . "\\controllers'";
 
@@ -593,7 +618,7 @@ use yii\web\View;
 <?php $this->endPage() ?>';
 }
 
-function generateDefaultConsoleController($appName): string
+function generateDefaultConsoleController($appName, $params = []): string
 {
     return '<?php
 
@@ -608,7 +633,7 @@ class DefaultController extends ConsoleController {
 }';
 }
 
-function generateDefaultApiController($appName): string
+function generateDefaultApiController($appName, $params = []): string
 {
     return '<?php
 
@@ -623,7 +648,7 @@ class DefaultController extends ApiController {
 }';
 }
 
-function generateDefaultWebController($appName): string
+function generateDefaultWebController($appName, $params = []): string
 {
     return '<?php
 
@@ -638,7 +663,7 @@ class DefaultController extends WebController {
 }';
 }
 
-function generateGiiModule($appName): string
+function generateGiiModule($appName, $params = []): string
 {
     return '<?php
 
@@ -656,7 +681,7 @@ class GiiModule extends Module {
 }';
 }
 
-function generateDebugModule($appName): string
+function generateDebugModule($appName, $params = []): string
 {
     return '<?php
 
@@ -669,7 +694,7 @@ class DebugModule extends Module {
 }';
 }
 
-function generateWebIndex($appName): string
+function generateWebIndex($appName, $params = []): string
 {
     return '<?php
 
@@ -694,7 +719,7 @@ function generateGitignore(): string
 !.gitignore';
 }
 
-function generateCacheComponent($appName): string
+function generateCacheComponent($appName, $params = []): string
 {
     return '<?php
 
@@ -714,7 +739,7 @@ class CacheComponent extends Cache {
 }';
 }
 
-function generateDbComponent($appName): string
+function generateDbComponent($appName, $params = []): string
 {
     return '<?php
 
@@ -734,7 +759,7 @@ class DbComponent extends Connection {
 }';
 }
 
-function generateLogComponent($appName): string
+function generateLogComponent($appName, $params = []): string
 {
     return '<?php
 
@@ -753,7 +778,7 @@ class LogComponent extends Dispatcher {
 }';
 }
 
-function generateMongodbComponent($appName): string
+function generateMongodbComponent($appName, $params = []): string
 {
     return '<?php
 
@@ -766,7 +791,7 @@ class MongodbComponent extends Connection {
 }';
 }
 
-function generateQueueComponent($appName): string
+function generateQueueComponent($appName, $params = []): string
 {
     return '<?php
 
@@ -786,7 +811,7 @@ class QueueComponent extends Queue {
 }';
 }
 
-function generateRequestComponent($appName): string
+function generateRequestComponent($appName, $params = []): string
 {
     return '<?php
 
@@ -794,13 +819,13 @@ namespace ' . $appName . '\components;
 
 use yii\web\Request;
 class RequestComponent extends Request {
-    public $csrfParam = \'csrf-app-dev\';
-    public $cookieValidationKey = \'cookie_validation_key_dev\';
+    public $csrfParam = \'csrf-app-' . $appName . '\';
+    public $cookieValidationKey = \'cookie_validation_key_' . $appName . '\';
     
 }';
 }
 
-function generateSessionComponent($appName): string
+function generateSessionComponent($appName, $params = []): string
 {
     return '<?php
 
@@ -813,7 +838,7 @@ class SessionComponent extends Session {
 }';
 }
 
-function generateUrlManagerComponent($appName): string
+function generateUrlManagerComponent($appName, $params = []): string
 {
     return '<?php
 
@@ -831,7 +856,7 @@ class UrlManagerComponent extends UrlManager {
 }';
 }
 
-function generateUserComponent($appName): string
+function generateUserComponent($appName, $params = []): string
 {
     return '<?php
 
@@ -846,7 +871,7 @@ class UserComponent extends User {
 }';
 }
 
-function generateResponseComponent($appName): string
+function generateResponseApiComponent($appName, $params = []): string
 {
     return '<?php
 
@@ -861,7 +886,7 @@ class ResponseComponent extends Response {
         parent::init();
 
         $this->on(self::EVENT_BEFORE_SEND, function (Event $event) {
-            $this->format = Response::FORMAT_JSON;
+            $this->format = self::FORMAT_JSON;
 
             $event->sender = ResponseHelper::generate($event);
         });
@@ -870,8 +895,25 @@ class ResponseComponent extends Response {
 }';
 }
 
-function generateNginxConfig($appName): string
+function generateResponseWebComponent($appName, $params = []): string
 {
+    return '<?php
+
+namespace ' . $appName . '\components;
+
+use mvbsoft\ResponseHelper;
+use yii\base\Event;
+use yii\web\Response;
+class ResponseComponent extends Response {
+    public $format = self::FORMAT_HTML;
+
+}';
+}
+
+function generateNginxConfig($appName, $params = []): string
+{
+    $host = $params['host'] ?? null;
+
     return 'server {
     charset utf-8;
     client_max_body_size 128M;
@@ -879,7 +921,7 @@ function generateNginxConfig($appName): string
 
     listen 80; ## listen for ipv4
 
-    server_name  dev.template.host;
+    server_name ' . $host . ';
     root        /var/www/apps/' . $appName . '/web;
     index       index.php index.html index.htm;
 

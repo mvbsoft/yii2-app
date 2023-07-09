@@ -113,11 +113,11 @@ if($devHost){
 }
 
 if($prodHost){
-    createFile($appName, "/etc/nginx/sites-available/$prodHost.conf", 'generateNginxConfig', ['host' => $devHost]);
+    createFile($appName, "/etc/nginx/sites-available/$prodHost.conf", 'generateNginxConfig', ['host' => $prodHost]);
 }
 
 if($localHost){
-    createFile($appName, "/etc/nginx/sites-available/$localHost.conf", 'generateNginxConfig', ['host' => $devHost]);
+    createFile($appName, "/etc/nginx/sites-available/$localHost.conf", 'generateNginxConfig', ['host' => $localHost]);
 }
 
 function createAppStruct(string $applicationName, string $applicationType, string $path, array $struct): void

@@ -32,6 +32,7 @@ RUN apt-get update \
     && apt-get install -y postgresql \
     && pecl install mongodb \
     && pecl install imagick \
+    && pecl install apcu \
     && docker-php-ext-install intl opcache shmop zip pdo pgsql pdo_pgsql exif mbstring xml gd bcmath \
     && rm -rf /var/lib/apt/lists/* \
     && curl -s https://getcomposer.org/installer | php \

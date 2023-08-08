@@ -135,20 +135,71 @@ class Configurator {
         return $configs;
     }
 
+    private static function generateHash(string $appFolderName, string $configuratorFile, string $moduleConfigFolder, string $componentConfigFolder): string
+    {
+        $configuratorFileHash = md5($configuratorFile);
+        $moduleConfigFolderHash = md5(implode('', array_map('md5_file', glob("$moduleConfigFolder/*"))));
+        $componentConfigFolderHash = md5(implode('', array_map('md5_file', glob("$componentConfigFolder/*"))));
+
+        return md5($appFolderName . $configuratorFileHash . $moduleConfigFolderHash . $componentConfigFolderHash);
+    }
+
+    private static function formatArray($array, $indent = 0): string
+    {
+        $result = "[\n";
+
+        foreach ($array as $key => $value) {
+            if (is_array($value)) {
+                $value = self::formatArray($value, $indent + 1);
+            } else {
+                $value = var_export($value, true);
+            }
+
+            $result .= str_repeat('    ', $indent + 1) . "'$key' => $value,\n";
+        }
+
+        $result .= str_repeat('    ', $indent) . "]";
+
+        return $result;
+    }
+
     public static function build(): array
     {
         $configurator = new static();
+        $appFolderName = $configurator->getAppFolderName();
 
-        try {
-            $configs = $configurator->_prepareBaseConfigs($configurator);
+        $configuratorFile = "/var/www/apps/$appFolderName/Configurator.php";
+        $moduleConfigFolder = "/var/www/apps/$appFolderName/modules";
+        $componentConfigFolder = "/var/www/apps/$appFolderName/components";
 
-            $appFolderName = $configurator->getAppFolderName();
+        $currentVersion = self::generateHash($appFolderName, $configuratorFile, $moduleConfigFolder, $componentConfigFolder);
 
-            $configs['modules'] = $configurator->_prepareConfigs('Module', "/var/www/apps/$appFolderName/modules", "$appFolderName\\modules");
+        $configFilename = "/var/www/apps/$appFolderName/configs/$currentVersion.php";
 
-            $configs['components'] = $configurator->_prepareConfigs('Component', "/var/www/apps/$appFolderName/components", "$appFolderName\\components");
-        } catch (ReflectionException $e) {
-            exit("Invalid configuration: " . $e->getMessage());
+        var_dump($currentVersion);
+
+        if (file_exists($configFilename)) {
+            $configs = include $configFilename;
+        } else {
+            try {
+                $configs = $configurator->_prepareBaseConfigs($configurator);
+
+                $appFolderName = $configurator->getAppFolderName();
+
+                $configs['modules'] = $configurator->_prepareConfigs('Module', $moduleConfigFolder, "$appFolderName\\modules");
+
+                $configs['components'] = $configurator->_prepareConfigs('Component', $componentConfigFolder, "$appFolderName\\components");
+
+                $configDir = dirname($configFilename);
+
+                if (!is_dir($configDir)) {
+                    mkdir($configDir, 0755, true);
+                }
+
+                file_put_contents($configFilename, '<?php return ' . self::formatArray($configs) . ';');
+            } catch (ReflectionException $e) {
+                exit("Invalid configuration: " . $e->getMessage());
+            }
         }
 
         return $configs;

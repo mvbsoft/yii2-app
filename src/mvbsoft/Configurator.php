@@ -176,8 +176,6 @@ class Configurator {
 
         $configFilename = "/var/www/apps/$appFolderName/configs/$currentVersion.php";
 
-        var_dump($currentVersion);
-
         if (file_exists($configFilename)) {
             $configs = include $configFilename;
         } else {
